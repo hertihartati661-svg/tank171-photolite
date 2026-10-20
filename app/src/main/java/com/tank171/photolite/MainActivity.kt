@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pilih foto untuk mulai mengolah gambar.") }
         var pendingSaveAfterPermission by remember { mutableStateOf(false) }
+        var pendingShareAfterPermission by remember { mutableStateOf(false) }
 
         val storagePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) pendingSaveAfterPermission = true
@@ -236,6 +237,7 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
                 checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
             ) {
+                pendingShareAfterPermission = shareAfterSave
                 storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 return
             }
@@ -273,7 +275,9 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(pendingSaveAfterPermission) {
             if (pendingSaveAfterPermission) {
                 pendingSaveAfterPermission = false
-                savePhoto()
+                val shouldShare = pendingShareAfterPermission
+                pendingShareAfterPermission = false
+                savePhoto(shareAfterSave = shouldShare)
             }
         }
 
