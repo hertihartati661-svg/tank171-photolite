@@ -162,13 +162,15 @@ class MainActivity : ComponentActivity() {
                         Bitmap.createScaledBitmap(original, outWidth, outHeight, true) else original
 
                     var best: ByteArray? = null
-                    var bestUnderSize = false
+                    var bestWidth = current!!.width
+                    var bestHeight = current!!.height
                     var q = initialQuality
                     var attempt = 0
-                    while (attempt < 30) {
+                    while (attempt < 40) {
                         attempt++
+                        val bitmap = current!!
                         val stream = ByteArrayOutputStream()
-                        val success = current!!.compress(
+                        val success = bitmap.compress(
                             selectedFormat.bitmapFormat,
                             if (selectedFormat == ImageFormat.PNG) 100 else q,
                             stream
@@ -176,43 +178,44 @@ class MainActivity : ComponentActivity() {
                         if (!success) throw IOException("Gagal membuat format keluaran.")
                         val candidate = stream.toByteArray()
 
+                        // The quality slider is respected; target KB is a maximum size.
                         if (candidate.size.toLong() <= targetBytes) {
-                            if (!bestUnderSize || candidate.size > (best?.size ?: -1)) best = candidate
-                            bestUnderSize = true
-                            // Target is a maximum. If far below it, raise quality to get closer.
-                            if (selectedFormat == ImageFormat.PNG || q >= 100) break
-                            q = minOf(100, q + 5)
-                            continue
-                        } else if (!bestUnderSize) {
-                            if (best == null || candidate.size < best!!.size) best = candidate
-                        } else {
-                            // Keep the best in-budget candidate rather than degrading it.
+                            best = candidate
+                            bestWidth = bitmap.width
+                            bestHeight = bitmap.height
                             break
+                        }
+
+                        if (best == null || candidate.size < best!!.size) {
+                            best = candidate
+                            bestWidth = bitmap.width
+                            bestHeight = bitmap.height
                         }
 
                         if (selectedFormat != ImageFormat.PNG && q > 30) {
                             q = max(30, q - 10)
-                        } else {
-                            val bitmap = current!!
-                            if (bitmap.width <= 320 || bitmap.height <= 320) break
-                            val factor = if (candidate.size.toLong() > targetBytes * 2L) 0.72f else 0.86f
-                            val scaled = Bitmap.createScaledBitmap(
-                                bitmap,
-                                max(1, (bitmap.width * factor).roundToInt()),
-                                max(1, (bitmap.height * factor).roundToInt()),
-                                true
-                            )
-                            if (bitmap !== decoded && !bitmap.isRecycled) bitmap.recycle()
-                            current = scaled
-                            q = initialQuality
+                            continue
                         }
+
+                        if (bitmap.width <= 320 || bitmap.height <= 320) break
+                        val factor = if (candidate.size.toLong() > targetBytes * 2L) 0.72f else 0.86f
+                        val scaled = Bitmap.createScaledBitmap(
+                            bitmap,
+                            max(1, (bitmap.width * factor).roundToInt()),
+                            max(1, (bitmap.height * factor).roundToInt()),
+                            true
+                        )
+                        if (bitmap !== decoded && !bitmap.isRecycled) bitmap.recycle()
+                        current = scaled
+                        best = null
+                        q = initialQuality
                     }
 
                     val result = best ?: throw IOException("Tidak berhasil menghasilkan gambar.")
-                    val dimensions = current!!.width.toString() + " × " + current!!.height + " px"
+                    val dimensions = bestWidth.toString() + " × " + bestHeight + " px"
                     val message = if (result.size.toLong() <= targetBytes)
-                        "Selesai: target ukuran tercapai." else
-                        "Selesai, tetapi target belum tercapai. Coba target lebih besar atau JPG/WebP."
+                        "Selesai: ukuran di bawah batas target." else
+                        "Selesai, tetapi batas target belum tercapai pada kualitas/resolusi minimum."
                     runOnUiThread {
                         output = result
                         savedUri = null
