@@ -26,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.ByteArrayOutputStream
@@ -219,9 +220,11 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(48.dp).background(Cyan, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Image, contentDescription = null, tint = Navy, modifier = Modifier.size(28.dp))
-                    }
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(id = R.drawable.ic_photolite_171),
+                        contentDescription = "Logo PhotoLite 171",
+                        modifier = Modifier.size(56.dp)
+                    )
                     Column {
                         Text("PhotoLite 171", fontSize = 23.sp, color = Color.White)
                         Text("Kompres • konversi • ubah resolusi", color = Muted, fontSize = 13.sp)
