@@ -50,8 +50,7 @@ private val Muted = Color(0xFF9AAAC1)
 
 private enum class ImageFormat(val label: String, val mime: String, val extension: String, val bitmapFormat: Bitmap.CompressFormat) {
     JPEG("JPG / JPEG", "image/jpeg", "jpg", Bitmap.CompressFormat.JPEG),
-    PNG("PNG", "image/png", "png", Bitmap.CompressFormat.PNG),
-    WEBP("WebP", "image/webp", "webp", Bitmap.CompressFormat.WEBP)
+    PNG("PNG", "image/png", "png", Bitmap.CompressFormat.PNG)
 }
 
 class MainActivity : ComponentActivity() {
@@ -72,8 +71,6 @@ class MainActivity : ComponentActivity() {
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
         var targetKb by remember { mutableFloatStateOf(471f) }
-        var quality by remember { mutableFloatStateOf(82f) }
-        var maxWidth by remember { mutableFloatStateOf(1600f) }
         var format by remember { mutableStateOf(ImageFormat.JPEG) }
         var output by remember { mutableStateOf<ByteArray?>(null) }
         var savedUri by remember { mutableStateOf<Uri?>(null) }
@@ -121,8 +118,8 @@ class MainActivity : ComponentActivity() {
             val uri = source ?: return
             // Snapshot Compose state on the UI thread before starting background work.
             val targetBytes = targetKb.roundToInt().toLong() * 1024L
-            val initialQuality = quality.roundToInt().coerceIn(30, 100)
-            val requestedWidth = maxWidth.roundToInt().coerceIn(320, 4096)
+            val initialQuality = 85
+            val requestedWidth = 4096
             val selectedFormat = format
             busy = true
             output = null
@@ -316,7 +313,7 @@ class MainActivity : ComponentActivity() {
                     )
                     Column {
                         Text("PhotoLite 171", fontSize = 23.sp, color = Color.White)
-                        Text("Kompres • konversi • ubah resolusi", color = Muted, fontSize = 13.sp)
+                        Text("Kompres ukuran • Konversi JPG ↔ PNG", color = Muted, fontSize = 13.sp)
                     }
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
@@ -350,7 +347,7 @@ class MainActivity : ComponentActivity() {
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("2. ATUR HASIL", color = Cyan, fontSize = 12.sp)
-                        Text("Format keluaran", fontSize = 15.sp)
+                        Text("Pilih format tujuan (JPG ↔ PNG)", fontSize = 15.sp)
                         ImageFormat.values().forEach { option ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(
@@ -367,11 +364,7 @@ class MainActivity : ComponentActivity() {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
                             Text("5 MB", color = Muted, fontSize = 11.sp)
                         }
-                        Text("Kualitas JPEG/WebP: " + quality.roundToInt() + "%", fontSize = 15.sp)
-                        Slider(value = quality, onValueChange = { quality = it }, valueRange = 30f..100f, enabled = !busy && format != ImageFormat.PNG)
-                        Text("Lebar maksimum: " + maxWidth.roundToInt() + " px", fontSize = 15.sp)
-                        Slider(value = maxWidth, onValueChange = { maxWidth = it }, valueRange = 320f..2560f, steps = 13, enabled = !busy)
-                        Text("Rasio gambar dipertahankan otomatis.", color = Muted, fontSize = 12.sp)
+                        Text("Kompres: target ukuran maksimum. Konversi: pilih format tujuan JPG atau PNG.", color = Muted, fontSize = 12.sp)
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             else Text("Proses gambar")
