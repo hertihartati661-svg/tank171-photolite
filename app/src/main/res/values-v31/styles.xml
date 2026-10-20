@@ -7,6 +7,5 @@
         <item name="android:windowSplashScreenBackground">#0A1020</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_photolite_171</item>
         <item name="android:windowSplashScreenBrandingImage">@drawable/ic_photolite_171</item>
-        <item name="android:postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>
