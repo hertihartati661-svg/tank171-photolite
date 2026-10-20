@@ -276,7 +276,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 savedUri = uri
-                status = "Tersimpan di Pictures/PhotoLite171."
+                status = "Foto berhasil disimpan. Nama file: " + displayName + ". Lokasi: Galeri > Pictures/PhotoLite171."
                 Toast.makeText(this@MainActivity, "Foto berhasil disimpan", Toast.LENGTH_SHORT).show()
                 if (shareAfterSave) {
                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -375,10 +375,24 @@ class MainActivity : ComponentActivity() {
                     Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("HASIL GAMBAR", color = Cyan, fontSize = 12.sp)
-                            Text(formatBytes(output!!.size.toLong()), fontSize = 25.sp)
+                            val resultBitmap = remember(output) {
+                                BitmapFactory.decodeByteArray(output, 0, output!!.size)
+                            }
+                            if (resultBitmap != null) {
+                                Image(
+                                    bitmap = resultBitmap.asImageBitmap(),
+                                    contentDescription = "Pratinjau hasil foto",
+                                    modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Text("Resolusi hasil: ${resultBitmap.width} × ${resultBitmap.height} px", color = Muted, fontSize = 13.sp)
+                            }
+                            Text("Format hasil: ${format.label}", color = Color.White, fontSize = 15.sp)
+                            Text("Ukuran hasil: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
                             val before = sourceSize
                             if (before != null && before > 0) {
                                 val reduction = 100.0 * (before - output!!.size) / before
+                                Text("Ukuran asli: ${formatBytes(before)}", color = Muted)
                                 Text("Perubahan ukuran: " + DecimalFormat("0.0").format(reduction) + "%", color = Muted)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
