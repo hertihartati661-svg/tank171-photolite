@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Environment
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.File
 import java.text.DecimalFormat
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
                         if (!success) throw IOException("Gagal membuat format keluaran.")
                         val candidate = stream.toByteArray()
 
-                        // The quality slider is respected; target KB is a maximum size.
+                        // The target KB is a maximum size; JPEG quality is adjusted internally.
                         if (candidate.size.toLong() <= targetBytes) {
                             best = candidate
                             bestWidth = bitmap.width
@@ -263,16 +265,32 @@ class MainActivity : ComponentActivity() {
                         throw e
                     }
                 } else {
-                    // Legacy Android does not support RELATIVE_PATH; use its compatible MediaStore API.
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        ?: throw IOException("Hasil gambar tidak bisa dibuka untuk disimpan.")
+                    // Android 9 and older: write to the app's Pictures folder and register
+                    // the exact filename and MIME type in MediaStore.
+                    val picturesDir = File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                        "PhotoLite171"
+                    )
+                    if (!picturesDir.exists() && !picturesDir.mkdirs()) {
+                        throw IOException("Tidak bisa membuat folder Pictures/PhotoLite171.")
+                    }
+                    val file = File(picturesDir, displayName)
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                        put(MediaStore.Images.Media.TITLE, displayName)
+                        put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
+                        put(MediaStore.Images.Media.DATA, file.absolutePath)
+                    }
+                    val inserted = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IOException("Android tidak bisa mendaftarkan file di galeri.")
                     try {
-                        val inserted = MediaStore.Images.Media.insertImage(
-                            contentResolver, bitmap, displayName, "PhotoLite 171"
-                        ) ?: throw IOException("Android tidak bisa membuat file di galeri.")
-                        Uri.parse(inserted)
-                    } finally {
-                        bitmap.recycle()
+                        contentResolver.openOutputStream(inserted, "w")?.use { it.write(bytes) }
+                            ?: throw IOException("Android tidak bisa menulis hasil gambar.")
+                        inserted
+                    } catch (e: Exception) {
+                        contentResolver.delete(inserted, null, null)
+                        if (file.exists()) file.delete()
+                        throw e
                     }
                 }
                 savedUri = uri
@@ -375,8 +393,9 @@ class MainActivity : ComponentActivity() {
                     Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("HASIL GAMBAR", color = Cyan, fontSize = 12.sp)
-                            val resultBitmap = remember(output) {
-                                BitmapFactory.decodeByteArray(output, 0, output!!.size)
+                            val resultBytes = output!!
+                            val resultBitmap = remember(resultBytes) {
+                                BitmapFactory.decodeByteArray(resultBytes, 0, resultBytes.size)
                             }
                             if (resultBitmap != null) {
                                 Image(
