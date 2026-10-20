@@ -99,9 +99,14 @@ class MainActivity : ComponentActivity() {
                 var current: Bitmap? = null
                 try {
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                        ?: throw IOException("Foto tidak bisa dibaca.")
-                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("Format gambar tidak dikenali.")
+                    val boundsStream = contentResolver.openInputStream(uri)
+                        ?: throw IOException("Tidak bisa membuka foto dari galeri.")
+                    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
+                    // With inJustDecodeBounds=true, decodeStream normally returns null by design.
+                    // Validate the dimensions instead of treating that null as a decode failure.
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        throw IOException("Format gambar tidak dikenali atau foto tidak dapat dibaca.")
+                    }
 
                     var sample = 1
                     while (bounds.outWidth / (sample * 2) >= requestedWidth * 2 &&
