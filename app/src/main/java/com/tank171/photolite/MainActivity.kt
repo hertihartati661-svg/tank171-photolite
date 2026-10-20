@@ -43,7 +43,7 @@ private val Muted = Color(0xFF9AAAC1)
 private enum class ImageFormat(val label: String, val mime: String, val extension: String, val bitmapFormat: Bitmap.CompressFormat) {
     JPEG("JPG / JPEG", "image/jpeg", "jpg", Bitmap.CompressFormat.JPEG),
     PNG("PNG", "image/png", "png", Bitmap.CompressFormat.PNG),
-    WEBP("WebP", "image/webp", "webp", Bitmap.CompressFormat.WEBP_LOSSY)
+    WEBP("WebP", "image/webp", "webp", Bitmap.CompressFormat.WEBP)
 }
 
 class MainActivity : ComponentActivity() {
