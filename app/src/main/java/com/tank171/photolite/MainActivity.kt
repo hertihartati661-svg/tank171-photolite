@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
                             bestHeight = bitmap.height
                         }
 
-                        if (selectedFormat != ImageFormat.PNG && q > 30) {
+                        if (selectedFormat == ImageFormat.JPEG && q > 30) {
                             q = max(30, q - 10)
                             continue
                         }
