@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
         var targetKb by remember { mutableFloatStateOf(471f) }
         var format by remember { mutableStateOf(ImageFormat.JPEG) }
         var output by remember { mutableStateOf<ByteArray?>(null) }
+        // Keep the format used to encode these exact output bytes; do not infer it from a later UI selection.
+        var outputFormat by remember { mutableStateOf<ImageFormat?>(null) }
         var savedUri by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pilih foto untuk mulai mengolah gambar.") }
@@ -111,6 +113,7 @@ class MainActivity : ComponentActivity() {
                     contentResolver.openAssetFileDescriptor(uri, "r")?.use { if (it.length >= 0) it.length else null }
                 } catch (_: Exception) { null }
                 output = null
+                outputFormat = null
                 savedUri = null
                 status = "Foto siap diproses."
             }
@@ -125,6 +128,7 @@ class MainActivity : ComponentActivity() {
             val selectedFormat = format
             busy = true
             output = null
+            outputFormat = null
             savedUri = null
             status = "Sedang memproses foto…"
 
@@ -217,6 +221,7 @@ class MainActivity : ComponentActivity() {
                         "Selesai, tetapi batas target belum tercapai pada kualitas/resolusi minimum."
                     runOnUiThread {
                         output = result
+                        outputFormat = selectedFormat
                         savedUri = null
                         busy = false
                         status = message + " Resolusi hasil: " + dimensions + "."
@@ -235,7 +240,8 @@ class MainActivity : ComponentActivity() {
 
         fun savePhoto(shareAfterSave: Boolean = false) {
             val bytes = output ?: return
-            val selectedFormat = format
+            // Save using the format that actually encoded the output bytes.
+            val selectedFormat = outputFormat ?: return
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
                 checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
             ) {
@@ -370,7 +376,7 @@ class MainActivity : ComponentActivity() {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(
                                     selected = format == option,
-                                    onClick = { format = option; output = null; savedUri = null },
+                                    onClick = { format = option; output = null; outputFormat = null; savedUri = null },
                                     enabled = !busy
                                 )
                                 Text(option.label, color = Color.White)
@@ -406,7 +412,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Text("Resolusi hasil: ${resultBitmap.width} × ${resultBitmap.height} px", color = Muted, fontSize = 13.sp)
                             }
-                            Text("Format hasil: ${format.label}", color = Color.White, fontSize = 15.sp)
+                            Text("Format hasil: ${(outputFormat ?: format).label}", color = Color.White, fontSize = 15.sp)
                             Text("Ukuran hasil: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
                             val before = sourceSize
                             if (before != null && before > 0) {
