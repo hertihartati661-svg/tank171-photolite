@@ -242,19 +242,38 @@ class MainActivity : ComponentActivity() {
                 return
             }
             try {
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension)
-                    put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PhotoLite171")
-                }
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                    ?: throw IOException("Tidak bisa membuat file di galeri.")
-                try {
-                    contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                        ?: throw IOException("Tidak bisa menulis hasil gambar.")
-                } catch (e: Exception) {
-                    contentResolver.delete(uri, null, null)
-                    throw e
+                val displayName = "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension
+                val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                        put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PhotoLite171")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                    val inserted = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IOException("Android tidak bisa membuat file di galeri. Coba ruang penyimpanan lain.")
+                    try {
+                        contentResolver.openOutputStream(inserted, "w")?.use { it.write(bytes) }
+                            ?: throw IOException("Android tidak bisa menulis hasil gambar.")
+                        val ready = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                        contentResolver.update(inserted, ready, null, null)
+                        inserted
+                    } catch (e: Exception) {
+                        contentResolver.delete(inserted, null, null)
+                        throw e
+                    }
+                } else {
+                    // Legacy Android does not support RELATIVE_PATH; use its compatible MediaStore API.
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        ?: throw IOException("Hasil gambar tidak bisa dibuka untuk disimpan.")
+                    try {
+                        val inserted = MediaStore.Images.Media.insertImage(
+                            contentResolver, bitmap, displayName, "PhotoLite 171"
+                        ) ?: throw IOException("Android tidak bisa membuat file di galeri.")
+                        Uri.parse(inserted)
+                    } finally {
+                        bitmap.recycle()
+                    }
                 }
                 savedUri = uri
                 status = "Tersimpan di Pictures/PhotoLite171."
