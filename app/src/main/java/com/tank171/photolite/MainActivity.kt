@@ -1,9 +1,6 @@
 package com.tank171.photolite
 
-import android.Manifest
 import android.content.ContentValues
-import android.content.pm.PackageManager
-import android.os.Build
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -15,7 +12,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity() {
     private fun PhotoLiteScreen() {
         var source by remember { mutableStateOf<Uri?>(null) }
         var sourceSize by remember { mutableStateOf<Long?>(null) }
+        var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+        var previewDimensions by remember { mutableStateOf<String?>(null) }
         var targetKb by remember { mutableFloatStateOf(200f) }
         var quality by remember { mutableFloatStateOf(82f) }
         var maxWidth by remember { mutableFloatStateOf(1600f) }
@@ -73,14 +77,27 @@ class MainActivity : ComponentActivity() {
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pilih foto untuk mulai mengolah gambar.") }
 
-        val storagePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) savePhoto()
-            else status = "Izin penyimpanan ditolak. Izinkan akses agar hasil bisa disimpan."
-        }
-
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
                 source = uri
+                previewBitmap = null
+                previewDimensions = null
+                Thread {
+                    try {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                        val opts = BitmapFactory.Options().apply {
+                            inSampleSize = max(1, max(bounds.outWidth, bounds.outHeight) / 600)
+                        }
+                        val thumb = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+                        runOnUiThread {
+                            previewBitmap = thumb
+                            if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                                previewDimensions = "${bounds.outWidth} × ${bounds.outHeight} px"
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }.start()
                 sourceSize = try {
                     contentResolver.openAssetFileDescriptor(uri, "r")?.use { if (it.length >= 0) it.length else null }
                 } catch (_: Exception) { null }
@@ -204,17 +221,10 @@ class MainActivity : ComponentActivity() {
             }.start()
         }
 
-        fun savePhoto() {
+        fun savePhoto(shareAfterSave: Boolean = false) {
             val bytes = output ?: return
             val selectedFormat = format
-            // Android 9 and older require runtime write permission for MediaStore.
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-            ) {
-                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                return
-            }
-            try {
+                        try {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension)
                     put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
@@ -232,6 +242,14 @@ class MainActivity : ComponentActivity() {
                 savedUri = uri
                 status = "Tersimpan di Pictures/PhotoLite171."
                 Toast.makeText(this@MainActivity, "Foto berhasil disimpan", Toast.LENGTH_SHORT).show()
+                if (shareAfterSave) {
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = selectedFormat.mime
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(intent, "Bagikan gambar"))
+                }
             } catch (e: Exception) {
                 status = "Gagal menyimpan: " + (e.message ?: "penyimpanan bermasalah")
             }
@@ -257,7 +275,23 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("1. PILIH FOTO", color = Cyan, fontSize = 12.sp)
                         Text(if (source == null) "Belum ada foto dipilih" else "Foto terpilih", fontSize = 17.sp)
-                        Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "JPG, PNG, WebP, dan format yang didukung Android", color = Muted, fontSize = 13.sp)
+                        if (previewBitmap != null) {
+                            Image(
+                                bitmap = previewBitmap!!.asImageBitmap(),
+                                contentDescription = "Pratinjau foto terpilih",
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).aspectRatio(
+                                    previewBitmap!!.width.toFloat() / previewBitmap!!.height.toFloat(),
+                                    matchHeightConstraintsFirst = false
+                                ),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                listOfNotNull(sourceSize?.let { formatBytes(it) }, previewDimensions).joinToString(" • "),
+                                color = Muted, fontSize = 13.sp
+                            )
+                        } else {
+                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih JPG, PNG, WebP, atau format yang didukung Android", color = Muted, fontSize = 13.sp)
+                        }
                         Button(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) {
                             Icon(Icons.Default.Image, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
@@ -311,18 +345,7 @@ class MainActivity : ComponentActivity() {
                                     Icon(Icons.Default.SaveAlt, contentDescription = null)
                                     Spacer(Modifier.width(6.dp)); Text("Simpan")
                                 }
-                                OutlinedButton(onClick = {
-                                    val uri = savedUri
-                                    if (uri != null) {
-                                        val mime = format.mime
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = mime
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        startActivity(Intent.createChooser(intent, "Bagikan gambar"))
-                                    } else status = "Simpan hasil dulu sebelum membagikan."
-                                }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { savePhoto(shareAfterSave = true) }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.Share, contentDescription = null)
                                     Spacer(Modifier.width(6.dp)); Text("Bagikan")
                                 }
