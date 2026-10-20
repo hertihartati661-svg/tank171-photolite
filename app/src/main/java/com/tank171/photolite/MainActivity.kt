@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
         var sourceSize by remember { mutableStateOf<Long?>(null) }
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
-        var targetKb by remember { mutableFloatStateOf(200f) }
+        var targetKb by remember { mutableFloatStateOf(471f) }
         var quality by remember { mutableFloatStateOf(82f) }
         var maxWidth by remember { mutableFloatStateOf(1600f) }
         var format by remember { mutableStateOf(ImageFormat.JPEG) }
@@ -314,10 +314,10 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Text("Target ukuran: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
-                        Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..2048f, steps = 18, enabled = !busy)
+                        Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..5120f, enabled = !busy)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
-                            Text("2 MB", color = Muted, fontSize = 11.sp)
+                            Text("5 MB", color = Muted, fontSize = 11.sp)
                         }
                         Text("Kualitas JPEG/WebP: " + quality.roundToInt() + "%", fontSize = 15.sp)
                         Slider(value = quality, onValueChange = { quality = it }, valueRange = 30f..100f, enabled = !busy && format != ImageFormat.PNG)
