@@ -1,4 +1,4 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/photolite_icon_background" />
-    <foreground android:drawable="@drawable/ic_photolite_171" />
+    <foreground android:drawable="@drawable/ic_photolite_171_foreground" />
 </adaptive-icon>
