@@ -152,12 +152,15 @@ class MainActivity : ComponentActivity() {
                         if (candidate.size.toLong() <= targetBytes) {
                             if (!bestUnderSize || candidate.size > (best?.size ?: -1)) best = candidate
                             bestUnderSize = true
-                            if (selectedFormat == ImageFormat.PNG || q <= 30) break
-                            q = max(30, q - 8)
-                            // Don't shrink further after reaching the target; keep the best in-budget candidate.
+                            // Target is a maximum. If far below it, raise quality to get closer.
+                            if (selectedFormat == ImageFormat.PNG || q >= 100) break
+                            q = minOf(100, q + 5)
                             continue
                         } else if (!bestUnderSize) {
                             if (best == null || candidate.size < best!!.size) best = candidate
+                        } else {
+                            // Keep the best in-budget candidate rather than degrading it.
+                            break
                         }
 
                         if (selectedFormat != ImageFormat.PNG && q > 30) {
