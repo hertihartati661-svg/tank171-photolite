@@ -192,9 +192,9 @@ class MainActivity : ComponentActivity() {
             val selectedFormat = format
             try {
                 val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, "Tank171_PhotoLite_" + System.currentTimeMillis() + "." + selectedFormat.extension)
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension)
                     put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Tank171PhotoLite")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PhotoLite171")
                 }
                 val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                     ?: throw IOException("Tidak bisa membuat file di galeri.")
@@ -206,7 +206,7 @@ class MainActivity : ComponentActivity() {
                     throw e
                 }
                 savedUri = uri
-                status = "Tersimpan di Pictures/Tank171PhotoLite."
+                status = "Tersimpan di Pictures/PhotoLite171."
                 Toast.makeText(this@MainActivity, "Foto berhasil disimpan", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 status = "Gagal menyimpan: " + (e.message ?: "penyimpanan bermasalah")
@@ -223,7 +223,7 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Default.Image, contentDescription = null, tint = Navy, modifier = Modifier.size(28.dp))
                     }
                     Column {
-                        Text("Tank171 PhotoLite", fontSize = 23.sp, color = Color.White)
+                        Text("PhotoLite 171", fontSize = 23.sp, color = Color.White)
                         Text("Kompres • konversi • ubah resolusi", color = Muted, fontSize = 13.sp)
                     }
                 }
@@ -305,7 +305,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Text(status, color = Muted, fontSize = 13.sp)
-                Text("Pemrosesan gambar dilakukan di perangkat • Tank171", color = Muted, fontSize = 11.sp)
+                Text("Pemrosesan gambar dilakukan di perangkat • PhotoLite 171", color = Muted, fontSize = 11.sp)
             }
         }
     }
