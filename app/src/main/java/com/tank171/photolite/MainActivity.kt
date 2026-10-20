@@ -1,6 +1,9 @@
 package com.tank171.photolite
 
+import android.Manifest
 import android.content.ContentValues
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -69,6 +72,11 @@ class MainActivity : ComponentActivity() {
         var savedUri by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pilih foto untuk mulai mengolah gambar.") }
+
+        val storagePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) savePhoto()
+            else status = "Izin penyimpanan ditolak. Izinkan akses agar hasil bisa disimpan."
+        }
 
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
@@ -196,6 +204,13 @@ class MainActivity : ComponentActivity() {
         fun savePhoto() {
             val bytes = output ?: return
             val selectedFormat = format
+            // Android 9 and older require runtime write permission for MediaStore.
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            ) {
+                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                return
+            }
             try {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension)
