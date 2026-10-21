@@ -209,63 +209,85 @@ class MainActivity : ComponentActivity() {
                     current = if (outWidth != original.width || outHeight != original.height)
                         Bitmap.createScaledBitmap(original, outWidth, outHeight, true) else original
 
-                    // Search quality at full resolution first. Resize only if the maximum cannot be met.
+                    // Test every JPEG quality at the current resolution so we don't miss the chosen range.
                     var best: ByteArray? = null
                     var bestWidth = current!!.width
                     var bestHeight = current!!.height
                     var bestScore = Long.MAX_VALUE
                     var working = current!!
                     var resizeAttempts = 0
-                    while (resizeAttempts < 12) {
-                        var lowQuality = 45
-                        var highQuality = 100
-                        var qualityAttempts = 0
-                        while (lowQuality <= highQuality && qualityAttempts < 8) {
-                            qualityAttempts++
-                            val q = (lowQuality + highQuality) / 2
+                    while (resizeAttempts < 16) {
+                        var inRangeAtThisSize: ByteArray? = null
+                        var inRangeQuality = -1
+                        var closestAtThisSize: ByteArray? = null
+                        var closestScoreAtThisSize = Long.MAX_VALUE
+                        var smallestAtThisSize = Long.MAX_VALUE
+                        var largestAtThisSize = 0L
+
+                        for (q in 45..100) {
                             val stream = ByteArrayOutputStream()
                             if (!working.compress(Bitmap.CompressFormat.JPEG, q, stream)) {
                                 throw IOException("Gagal mengompres foto.")
                             }
                             val candidate = stream.toByteArray()
                             val size = candidate.size.toLong()
+                            smallestAtThisSize = minOf(smallestAtThisSize, size)
+                            largestAtThisSize = maxOf(largestAtThisSize, size)
                             val score = when {
-                                size in minTargetBytes..maxTargetBytes -> 0L
                                 size < minTargetBytes -> minTargetBytes - size
-                                else -> size - maxTargetBytes
+                                size > maxTargetBytes -> size - maxTargetBytes
+                                else -> 0L
                             }
-                            if (score < bestScore) {
-                                best = candidate
-                                bestWidth = working.width
-                                bestHeight = working.height
-                                bestScore = score
+                            if (score < closestScoreAtThisSize) {
+                                closestScoreAtThisSize = score
+                                closestAtThisSize = candidate
                             }
-                            if (size > maxTargetBytes) {
-                                highQuality = q - 1
-                            } else {
-                                lowQuality = q + 1
-                            }
-                            if (size in minTargetBytes..maxTargetBytes) {
-                                // Keep searching for the highest quality that remains in range.
-                                highQuality = 100
-                                lowQuality = q + 1
+                            // Higher quality wins if multiple qualities fit the requested range.
+                            if (size in minTargetBytes..maxTargetBytes && q > inRangeQuality) {
+                                inRangeAtThisSize = candidate
+                                inRangeQuality = q
                             }
                         }
-                        if (best != null && best!!.size.toLong() in minTargetBytes..maxTargetBytes) break
-                        val bestNow = best
-                        // A result below minimum is preferable to damaging/enlarging it just to inflate bytes.
-                        if (bestNow != null && bestNow.size.toLong() < minTargetBytes) break
-                        if (working.width <= 480 || working.height <= 480) break
-                        val factor = if (bestNow != null && bestNow.size.toLong() > maxTargetBytes * 2L) 0.90f else 0.96f
-                        val resized = Bitmap.createScaledBitmap(
-                            working,
-                            max(1, (working.width * factor).roundToInt()),
-                            max(1, (working.height * factor).roundToInt()),
-                            true
-                        )
-                        if (working !== decoded && !working.isRecycled) working.recycle()
-                        working = resized
-                        resizeAttempts++
+
+                        if (inRangeAtThisSize != null) {
+                            best = inRangeAtThisSize
+                            bestWidth = working.width
+                            bestHeight = working.height
+                            break
+                        }
+
+                        val candidate = closestAtThisSize
+                            ?: throw IOException("Tidak berhasil menghasilkan gambar.")
+                        if (closestScoreAtThisSize < bestScore) {
+                            best = candidate
+                            bestWidth = working.width
+                            bestHeight = working.height
+                            bestScore = closestScoreAtThisSize
+                        }
+
+                        // If even quality 100 is below the minimum, do not upscale or add fake bytes.
+                        if (largestAtThisSize < minTargetBytes) break
+                        // If some qualities are below minimum and others above maximum, resizing won't
+                        // reliably fix the gap; keep the closest result and report the range miss.
+                        val hasBelowMinimum = smallestAtThisSize < minTargetBytes
+                        val hasAboveMaximum = largestAtThisSize > maxTargetBytes
+                        if (hasBelowMinimum && hasAboveMaximum) break
+                        // All qualities are too large: reduce dimensions gradually, then test all qualities again.
+                        if (!hasBelowMinimum && hasAboveMaximum) {
+                            if (working.width <= 320 || working.height <= 320) break
+                            val resized = Bitmap.createScaledBitmap(
+                                working,
+                                max(1, (working.width * 0.92f).roundToInt()),
+                                max(1, (working.height * 0.92f).roundToInt()),
+                                true
+                            )
+                            if (working !== decoded && !working.isRecycled) working.recycle()
+                            working = resized
+                            resizeAttempts++
+                            continue
+                        }
+                        // No possible quality fits; the closest candidate is safer than further resizing.
+                        break
                     }
                     if (current !== decoded && current !== working && !current!!.isRecycled) current!!.recycle()
                     current = working
