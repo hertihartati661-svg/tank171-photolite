@@ -1,4 +1,4 @@
-name: Build PicLite171 APK # Output artifact: PicLite171-APK
+name: Build PicLite171 APK # Validate flexible min-max size controls
 
 on:
   workflow_dispatch:
