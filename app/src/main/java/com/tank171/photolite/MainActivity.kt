@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Text(status, color = Muted, fontSize = 13.sp)
-                Text("Foto diproses di perangkat • PicLite 171", color = Muted, fontSize = 11.sp)
+                Text("Foto diproses di perangkat • PicLite 171", color = Muted, fontSize = 11.sp) 
             }
         }
         }
