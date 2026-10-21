@@ -50,44 +50,6 @@ private val Panel = Color(0xFF151F33)
 private val Cyan = Color(0xFF39D7F2)
 private val Muted = Color(0xFF9AAAC1)
 
-private enum class ImageFormat(val label: String, val mime: String, val extension: String, val bitmapFormat: Bitmap.CompressFormat) {
-    JPEG("JPG / JPEG", "image/jpeg", "jpg", Bitmap.CompressFormat.JPEG),
-    PNG("PNG", "image/png", "png", Bitmap.CompressFormat.PNG)
-}
-
-/**
- * Re-encode the processed image at save time using the selected output codec.
- * This prevents a filename/MIME change from masquerading as a real conversion.
- */
-private fun reencodeForFormat(input: ByteArray, format: ImageFormat): ByteArray {
-    val bitmap = BitmapFactory.decodeByteArray(input, 0, input.size)
-        ?: throw IOException("Hasil foto tidak bisa dibaca untuk konversi format.")
-    try {
-        val stream = ByteArrayOutputStream()
-        val ok = bitmap.compress(
-            format.bitmapFormat,
-            if (format == ImageFormat.PNG) 100 else 90,
-            stream
-        )
-        if (!ok) throw IOException("Encoder format tujuan gagal membuat file.")
-        val result = stream.toByteArray()
-        val valid = when (format) {
-            ImageFormat.PNG -> result.size >= 8 &&
-                result[0] == 0x89.toByte() && result[1] == 0x50.toByte() &&
-                result[2] == 0x4E.toByte() && result[3] == 0x47.toByte() &&
-                result[4] == 0x0D.toByte() && result[5] == 0x0A.toByte() &&
-                result[6] == 0x1A.toByte() && result[7] == 0x0A.toByte()
-            ImageFormat.JPEG -> result.size >= 3 &&
-                result[0] == 0xFF.toByte() && result[1] == 0xD8.toByte() &&
-                result[2] == 0xFF.toByte()
-        }
-        if (!valid) throw IOException("Isi file tidak sesuai format tujuan.")
-        return result
-    } finally {
-        bitmap.recycle()
-    }
-}
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,10 +68,7 @@ class MainActivity : ComponentActivity() {
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
         var targetKb by remember { mutableFloatStateOf(471f) }
-        var format by remember { mutableStateOf(ImageFormat.JPEG) }
         var output by remember { mutableStateOf<ByteArray?>(null) }
-        // Keep the format used to encode these exact output bytes; do not infer it from a later UI selection.
-        var outputFormat by remember { mutableStateOf<ImageFormat?>(null) }
         var savedUri by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pilih foto untuk mulai mengolah gambar.") }
@@ -146,7 +105,6 @@ class MainActivity : ComponentActivity() {
                     contentResolver.openAssetFileDescriptor(uri, "r")?.use { if (it.length >= 0) it.length else null }
                 } catch (_: Exception) { null }
                 output = null
-                outputFormat = null
                 savedUri = null
                 status = "Foto siap diproses."
             }
@@ -158,10 +116,8 @@ class MainActivity : ComponentActivity() {
             val targetBytes = targetKb.roundToInt().toLong() * 1024L
             val initialQuality = 85
             val requestedWidth = 4096
-            val selectedFormat = format
             busy = true
             output = null
-            outputFormat = null
             savedUri = null
             status = "Sedang memproses foto…"
 
@@ -206,12 +162,8 @@ class MainActivity : ComponentActivity() {
                         attempt++
                         val bitmap = current!!
                         val stream = ByteArrayOutputStream()
-                        val success = bitmap.compress(
-                            selectedFormat.bitmapFormat,
-                            if (selectedFormat == ImageFormat.PNG) 100 else q,
-                            stream
-                        )
-                        if (!success) throw IOException("Gagal membuat format keluaran.")
+                        val success = bitmap.compress(Bitmap.CompressFormat.JPEG, q, stream)
+                        if (!success) throw IOException("Gagal mengompres foto.")
                         val candidate = stream.toByteArray()
 
                         // The target KB is a maximum size; JPEG quality is adjusted internally.
@@ -228,7 +180,7 @@ class MainActivity : ComponentActivity() {
                             bestHeight = bitmap.height
                         }
 
-                        if (selectedFormat == ImageFormat.JPEG && q > 30) {
+                        if (q > 30) {
                             q = max(30, q - 10)
                             continue
                         }
@@ -254,7 +206,6 @@ class MainActivity : ComponentActivity() {
                         "Selesai, tetapi batas target belum tercapai pada kualitas/resolusi minimum."
                     runOnUiThread {
                         output = result
-                        outputFormat = selectedFormat
                         savedUri = null
                         busy = false
                         status = message + " Resolusi hasil: " + dimensions + "."
@@ -272,15 +223,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun savePhoto(shareAfterSave: Boolean = false) {
-            val processedBytes = output ?: return
-            // Re-encode and verify the actual file signature before setting filename/MIME.
-            val selectedFormat = outputFormat ?: return
-            val bytes = try {
-                reencodeForFormat(processedBytes, selectedFormat)
-            } catch (e: Exception) {
-                status = "Gagal mengonversi format saat menyimpan: " + (e.message ?: "format tidak valid")
-                return
-            }
+            val bytes = output ?: return
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
                 checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
             ) {
@@ -289,11 +232,11 @@ class MainActivity : ComponentActivity() {
                 return
             }
             try {
-                val displayName = "PhotoLite_171_" + System.currentTimeMillis() + "." + selectedFormat.extension
+                val displayName = "PhotoLite_171_" + System.currentTimeMillis() + ".jpg"
                 val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val values = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-                        put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                         put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PhotoLite171")
                         put(MediaStore.Images.Media.IS_PENDING, 1)
                     }
@@ -323,7 +266,7 @@ class MainActivity : ComponentActivity() {
                     val values = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
                         put(MediaStore.Images.Media.TITLE, displayName)
-                        put(MediaStore.Images.Media.MIME_TYPE, selectedFormat.mime)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                         put(MediaStore.Images.Media.DATA, file.absolutePath)
                     }
                     val inserted = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -343,7 +286,7 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this@MainActivity, "Foto berhasil disimpan", Toast.LENGTH_SHORT).show()
                 if (shareAfterSave) {
                     val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = selectedFormat.mime
+                        type = "image/jpeg"
                         putExtra(Intent.EXTRA_STREAM, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
@@ -376,7 +319,7 @@ class MainActivity : ComponentActivity() {
                     )
                     Column {
                         Text("PhotoLite 171", fontSize = 23.sp, color = Color.White)
-                        Text("Kompres ukuran • Konversi JPG ↔ PNG", color = Muted, fontSize = 13.sp)
+                        Text("Kompres ukuran foto", color = Muted, fontSize = 13.sp)
                     }
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
@@ -410,24 +353,14 @@ class MainActivity : ComponentActivity() {
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("2. ATUR HASIL", color = Cyan, fontSize = 12.sp)
-                        Text("Pilih format tujuan (JPG ↔ PNG)", fontSize = 15.sp)
-                        ImageFormat.values().forEach { option ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(
-                                    selected = format == option,
-                                    onClick = { format = option; output = null; outputFormat = null; savedUri = null },
-                                    enabled = !busy
-                                )
-                                Text(option.label, color = Color.White)
-                            }
-                        }
+                        Text("Format hasil: JPG", fontSize = 15.sp)
                         Text("Target ukuran: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
                         Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..5120f, enabled = !busy)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
                             Text("5 MB", color = Muted, fontSize = 11.sp)
                         }
-                        Text("Kompres: target ukuran maksimum. Konversi: pilih format tujuan JPG atau PNG.", color = Muted, fontSize = 12.sp)
+                        Text("Kompres foto ke ukuran maksimum yang kamu tentukan. Hasil disimpan sebagai JPG.", color = Muted, fontSize = 12.sp)
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             else Text("Proses gambar")
@@ -451,7 +384,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Text("Resolusi hasil: ${resultBitmap.width} × ${resultBitmap.height} px", color = Muted, fontSize = 13.sp)
                             }
-                            Text("Format hasil: ${(outputFormat ?: format).label}", color = Color.White, fontSize = 15.sp)
+                            Text("Format hasil: JPG", color = Color.White, fontSize = 15.sp)
                             Text("Ukuran hasil: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
                             val before = sourceSize
                             if (before != null && before > 0) {
