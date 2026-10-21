@@ -1,8 +1,10 @@
-name: Build PhotoLite 171 Compression APK
+name: Build PicLite171 APK
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
       - 'app/**'
       - '.github/workflows/build-android.yml'
@@ -31,14 +33,13 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Give APK a distinct compression-only filename
-        run: cp app/build/outputs/apk/debug/app-debug.apk PhotoLite-171-Kompresi-Saja.apk
+      - name: Name APK PicLite171.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PicLite171.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PhotoLite-171-Compression-APK
-          path: PhotoLite-171-Kompresi-Saja.apk
-          # Artifact name uses the new app brand.
+          name: PicLite171-APK
+          path: PicLite171.apk
           if-no-files-found: error
           retention-days: 14
