@@ -8,6 +8,7 @@ import android.os.Environment
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -97,16 +98,37 @@ class MainActivity : ComponentActivity() {
                 previewDimensions = null
                 Thread {
                     try {
-                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                        val opts = BitmapFactory.Options().apply {
-                            inSampleSize = max(1, max(bounds.outWidth, bounds.outHeight) / 600)
+                        var originalWidth = 0
+                        var originalHeight = 0
+                        val thumb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            val imageSource = ImageDecoder.createSource(contentResolver, uri)
+                            ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
+                                originalWidth = info.size.width
+                                originalHeight = info.size.height
+                                val largest = max(originalWidth, originalHeight)
+                                if (largest > 600) {
+                                    val ratio = 600f / largest.toFloat()
+                                    decoder.setTargetSize(
+                                        max(1, (originalWidth * ratio).roundToInt()),
+                                        max(1, (originalHeight * ratio).roundToInt())
+                                    )
+                                }
+                                decoder.isMutableRequired = false
+                            }
+                        } else {
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                            originalWidth = bounds.outWidth
+                            originalHeight = bounds.outHeight
+                            val opts = BitmapFactory.Options().apply {
+                                inSampleSize = max(1, max(bounds.outWidth, bounds.outHeight) / 600)
+                            }
+                            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
                         }
-                        val thumb = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
                         runOnUiThread {
                             previewBitmap = thumb
-                            if (bounds.outWidth > 0 && bounds.outHeight > 0) {
-                                previewDimensions = "${bounds.outWidth} × ${bounds.outHeight} px"
+                            if (originalWidth > 0 && originalHeight > 0) {
+                                previewDimensions = "${originalWidth} × ${originalHeight} px"
                             }
                         }
                     } catch (_: Exception) { }
@@ -135,26 +157,47 @@ class MainActivity : ComponentActivity() {
                 var decoded: Bitmap? = null
                 var current: Bitmap? = null
                 try {
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    val boundsStream = contentResolver.openInputStream(uri)
-                        ?: throw IOException("Tidak bisa membuka foto dari galeri.")
-                    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
-                    // With inJustDecodeBounds=true, decodeStream normally returns null by design.
-                    // Validate the dimensions instead of treating that null as a decode failure.
-                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                        throw IOException("Format gambar tidak dikenali atau foto tidak dapat dibaca.")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        // ImageDecoder supports the image formats recognized by the Android device,
+                        // including newer formats on Android versions that provide their decoders.
+                        val imageSource = ImageDecoder.createSource(contentResolver, uri)
+                        decoded = ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
+                            val sourceWidth = info.size.width
+                            val sourceHeight = info.size.height
+                            if (sourceWidth <= 0 || sourceHeight <= 0) {
+                                throw IOException("Format gambar tidak dikenali atau foto tidak dapat dibaca.")
+                            }
+                            val largest = max(sourceWidth, sourceHeight)
+                            if (largest > requestedWidth) {
+                                val ratio = requestedWidth.toFloat() / largest.toFloat()
+                                decoder.setTargetSize(
+                                    max(1, (sourceWidth * ratio).roundToInt()),
+                                    max(1, (sourceHeight * ratio).roundToInt())
+                                )
+                            }
+                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                            decoder.isMutableRequired = true
+                        }
+                    } else {
+                        // Older Android versions use BitmapFactory for formats they support.
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        val boundsStream = contentResolver.openInputStream(uri)
+                            ?: throw IOException("Tidak bisa membuka foto dari galeri.")
+                        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                            throw IOException("Format gambar ini tidak didukung Android versi lama.")
+                        }
+                        var sample = 1
+                        while (bounds.outWidth / (sample * 2) >= requestedWidth * 2 &&
+                            bounds.outHeight / (sample * 2) >= 320) sample *= 2
+                        val options = BitmapFactory.Options().apply {
+                            inSampleSize = sample
+                            inPreferredConfig = Bitmap.Config.ARGB_8888
+                        }
+                        decoded = contentResolver.openInputStream(uri)?.use {
+                            BitmapFactory.decodeStream(it, null, options)
+                        } ?: throw IOException("Gagal membuka gambar.")
                     }
-
-                    var sample = 1
-                    while (bounds.outWidth / (sample * 2) >= requestedWidth * 2 &&
-                        bounds.outHeight / (sample * 2) >= 320) sample *= 2
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = sample
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
-                    }
-                    decoded = contentResolver.openInputStream(uri)?.use {
-                        BitmapFactory.decodeStream(it, null, options)
-                    } ?: throw IOException("Gagal membuka gambar.")
 
                     val original = decoded!!
                     val scale = minOf(1f, requestedWidth.toFloat() / original.width.toFloat())
