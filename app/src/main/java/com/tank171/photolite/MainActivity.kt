@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
         }
         var source by remember { mutableStateOf<Uri?>(null) }
         var sourceSize by remember { mutableStateOf<Long?>(null) }
+        var sourceMime by remember { mutableStateOf<String?>(null) }
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
         var targetKb by remember { mutableFloatStateOf(471f) }
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity() {
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
                 source = uri
+                sourceMime = try { contentResolver.getType(uri) } catch (_: Exception) { null }
                 previewBitmap = null
                 previewDimensions = null
                 Thread {
@@ -439,7 +441,7 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("2. KOMPRESI", color = Cyan, fontSize = 13.sp)
                         Text("Format hasil: JPG", fontSize = 15.sp)
-                        Text("Batas ukuran: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
+                        Text("Target maksimum: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
                         Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..5120f, enabled = !busy)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
@@ -469,13 +471,14 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Text("Resolusi hasil: ${resultBitmap.width} × ${resultBitmap.height} px", color = Muted, fontSize = 13.sp)
                             }
+                            Text("Format asli: " + (sourceMime?.substringAfter("/")?.uppercase() ?: "Tidak diketahui"), color = Muted, fontSize = 13.sp)
                             Text("Format hasil: JPG", color = Color.White, fontSize = 15.sp)
-                            Text("Ukuran hasil: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
+                            Text("Ukuran file hasil sebenarnya: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
                             val before = sourceSize
                             if (before != null && before > 0) {
                                 val reduction = 100.0 * (before - output!!.size) / before
-                                Text("Ukuran asli: ${formatBytes(before)}", color = Muted)
-                                Text("Perubahan ukuran: " + DecimalFormat("0.0").format(reduction) + "%", color = Muted)
+                                Text("Ukuran file asli: ${formatBytes(before)}", color = Muted)
+                                Text("Pengurangan ukuran: " + DecimalFormat("0.0").format(reduction) + "%", color = Muted)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(onClick = { savePhoto() }, modifier = Modifier.weight(1f)) {
