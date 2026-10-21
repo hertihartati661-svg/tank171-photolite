@@ -1,4 +1,4 @@
-name: Build PicLite171 APK # Validate flexible min-max size controls
+name: Build PicLite171 APK # Validate JPEG quality-range search
 
 on:
   workflow_dispatch:
