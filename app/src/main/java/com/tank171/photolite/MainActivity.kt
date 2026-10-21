@@ -521,7 +521,8 @@ class MainActivity : ComponentActivity() {
                             }
                             Text("Format asli: " + (sourceMime?.substringAfter("/")?.uppercase() ?: "Tidak diketahui"), color = Muted, fontSize = 13.sp)
                             Text("Format hasil: JPG", color = Color.White, fontSize = 15.sp)
-                            Text("Ukuran file hasil sebenarnya: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
+                            Text("Ukuran hasil aktual: " + formatBytes(output!!.size.toLong()), fontSize = 22.sp)
+                            Text("Ukuran dihitung dari data JPG yang akan disimpan, bukan angka target.", color = Muted, fontSize = 12.sp)
                             val before = sourceSize
                             if (before != null && before > 0) {
                                 val reduction = 100.0 * (before - output!!.size) / before
