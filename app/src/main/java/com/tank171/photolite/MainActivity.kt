@@ -55,6 +55,39 @@ private enum class ImageFormat(val label: String, val mime: String, val extensio
     PNG("PNG", "image/png", "png", Bitmap.CompressFormat.PNG)
 }
 
+/**
+ * Re-encode the processed image at save time using the selected output codec.
+ * This prevents a filename/MIME change from masquerading as a real conversion.
+ */
+private fun reencodeForFormat(input: ByteArray, format: ImageFormat): ByteArray {
+    val bitmap = BitmapFactory.decodeByteArray(input, 0, input.size)
+        ?: throw IOException("Hasil foto tidak bisa dibaca untuk konversi format.")
+    try {
+        val stream = ByteArrayOutputStream()
+        val ok = bitmap.compress(
+            format.bitmapFormat,
+            if (format == ImageFormat.PNG) 100 else 90,
+            stream
+        )
+        if (!ok) throw IOException("Encoder format tujuan gagal membuat file.")
+        val result = stream.toByteArray()
+        val valid = when (format) {
+            ImageFormat.PNG -> result.size >= 8 &&
+                result[0] == 0x89.toByte() && result[1] == 0x50.toByte() &&
+                result[2] == 0x4E.toByte() && result[3] == 0x47.toByte() &&
+                result[4] == 0x0D.toByte() && result[5] == 0x0A.toByte() &&
+                result[6] == 0x1A.toByte() && result[7] == 0x0A.toByte()
+            ImageFormat.JPEG -> result.size >= 3 &&
+                result[0] == 0xFF.toByte() && result[1] == 0xD8.toByte() &&
+                result[2] == 0xFF.toByte()
+        }
+        if (!valid) throw IOException("Isi file tidak sesuai format tujuan.")
+        return result
+    } finally {
+        bitmap.recycle()
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -239,9 +272,15 @@ class MainActivity : ComponentActivity() {
         }
 
         fun savePhoto(shareAfterSave: Boolean = false) {
-            val bytes = output ?: return
-            // Save using the format that actually encoded the output bytes.
+            val processedBytes = output ?: return
+            // Re-encode and verify the actual file signature before setting filename/MIME.
             val selectedFormat = outputFormat ?: return
+            val bytes = try {
+                reencodeForFormat(processedBytes, selectedFormat)
+            } catch (e: Exception) {
+                status = "Gagal mengonversi format saat menyimpan: " + (e.message ?: "format tidak valid")
+                return
+            }
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
                 checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
             ) {
