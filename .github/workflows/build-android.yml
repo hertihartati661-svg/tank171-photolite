@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build PhotoLite 171 Compression APK
 
 on:
   workflow_dispatch:
@@ -34,8 +34,10 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PhotoLite-171-APK
+          name: PhotoLite-171-Compression-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          # Download name is intentionally distinct from the previous conversion builds.
+          archive: false
           # Artifact name uses the new app brand.
           if-no-files-found: error
           retention-days: 14
