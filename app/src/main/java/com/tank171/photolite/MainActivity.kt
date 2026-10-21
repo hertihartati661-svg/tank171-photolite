@@ -224,7 +224,7 @@ class MainActivity : ComponentActivity() {
                         var smallestAtThisSize = Long.MAX_VALUE
                         var largestAtThisSize = 0L
 
-                        for (q in 45..100) {
+                        for (q in 1..100) {
                             val stream = ByteArrayOutputStream()
                             if (!working.compress(Bitmap.CompressFormat.JPEG, q, stream)) {
                                 throw IOException("Gagal mengompres foto.")
