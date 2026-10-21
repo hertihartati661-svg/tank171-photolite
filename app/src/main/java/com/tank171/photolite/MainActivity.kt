@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
     private fun PhotoLiteScreen() {
         var showIntro by remember { mutableStateOf(true) }
         LaunchedEffect(Unit) {
-            delay(1900)
+            delay(2000)
             showIntro = false
         }
         var source by remember { mutableStateOf<Uri?>(null) }
@@ -344,7 +344,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Text("PicLite 171", fontSize = 34.sp, color = Color.White)
-                    Text("Kompres Foto", fontSize = 13.sp, color = Cyan, letterSpacing = 1.0.sp)
                     Spacer(Modifier.height(14.dp))
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Cyan, strokeWidth = 2.dp)
                     Text("Siap dalam sekejap", color = Muted, fontSize = 12.sp)
@@ -386,7 +385,7 @@ class MainActivity : ComponentActivity() {
                                 color = Muted, fontSize = 13.sp
                             )
                         } else {
-                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih JPG, PNG, WebP, atau format yang didukung Android", color = Muted, fontSize = 13.sp)
+                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih gambar dengan format yang didukung Android", color = Muted, fontSize = 13.sp)
                         }
                         Button(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) {
                             Icon(Icons.Default.Image, contentDescription = null)
