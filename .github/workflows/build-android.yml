@@ -1,4 +1,4 @@
-name: Build PicLite171 APK
+name: Build PicLite171 APK # Output artifact: PicLite171-APK
 
 on:
   workflow_dispatch:
