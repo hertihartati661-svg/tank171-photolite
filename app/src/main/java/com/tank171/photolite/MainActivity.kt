@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                         Slider(
                             value = maxTargetKb,
                             onValueChange = { value -> maxTargetKb = maxOf(value, minTargetKb) },
-                            valueRange = 50f..5120f,
+                            valueRange = 50f..10240f,
                             enabled = !busy
                         )
                         Text("Rentang bebas 50 KB–10 MB. Pilih minimum dan maksimum sesuai kebutuhan; aplikasi menjaga kualitas sebisa mungkin.", color = Muted, fontSize = 12.sp)
