@@ -8,6 +8,7 @@ import android.os.Environment
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -18,6 +19,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Brush
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.asImageBitmap
@@ -53,6 +57,8 @@ private val Muted = Color(0xFF9AAAC1)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.rgb(10, 16, 32)
+        window.navigationBarColor = android.graphics.Color.rgb(10, 16, 32)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(
                 primary = Cyan, background = Navy, surface = Panel,
@@ -63,6 +69,11 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun PhotoLiteScreen() {
+        var showIntro by remember { mutableStateOf(true) }
+        LaunchedEffect(Unit) {
+            delay(2000)
+            showIntro = false
+        }
         var source by remember { mutableStateOf<Uri?>(null) }
         var sourceSize by remember { mutableStateOf<Long?>(null) }
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -87,16 +98,37 @@ class MainActivity : ComponentActivity() {
                 previewDimensions = null
                 Thread {
                     try {
-                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                        val opts = BitmapFactory.Options().apply {
-                            inSampleSize = max(1, max(bounds.outWidth, bounds.outHeight) / 600)
+                        var originalWidth = 0
+                        var originalHeight = 0
+                        val thumb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            val imageSource = ImageDecoder.createSource(contentResolver, uri)
+                            ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
+                                originalWidth = info.size.width
+                                originalHeight = info.size.height
+                                val largest = max(originalWidth, originalHeight)
+                                if (largest > 600) {
+                                    val ratio = 600f / largest.toFloat()
+                                    decoder.setTargetSize(
+                                        max(1, (originalWidth * ratio).roundToInt()),
+                                        max(1, (originalHeight * ratio).roundToInt())
+                                    )
+                                }
+                                decoder.isMutableRequired = false
+                            }
+                        } else {
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                            originalWidth = bounds.outWidth
+                            originalHeight = bounds.outHeight
+                            val opts = BitmapFactory.Options().apply {
+                                inSampleSize = max(1, max(bounds.outWidth, bounds.outHeight) / 600)
+                            }
+                            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
                         }
-                        val thumb = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
                         runOnUiThread {
                             previewBitmap = thumb
-                            if (bounds.outWidth > 0 && bounds.outHeight > 0) {
-                                previewDimensions = "${bounds.outWidth} × ${bounds.outHeight} px"
+                            if (originalWidth > 0 && originalHeight > 0) {
+                                previewDimensions = "${originalWidth} × ${originalHeight} px"
                             }
                         }
                     } catch (_: Exception) { }
@@ -125,26 +157,47 @@ class MainActivity : ComponentActivity() {
                 var decoded: Bitmap? = null
                 var current: Bitmap? = null
                 try {
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    val boundsStream = contentResolver.openInputStream(uri)
-                        ?: throw IOException("Tidak bisa membuka foto dari galeri.")
-                    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
-                    // With inJustDecodeBounds=true, decodeStream normally returns null by design.
-                    // Validate the dimensions instead of treating that null as a decode failure.
-                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                        throw IOException("Format gambar tidak dikenali atau foto tidak dapat dibaca.")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        // ImageDecoder supports the image formats recognized by the Android device,
+                        // including newer formats on Android versions that provide their decoders.
+                        val imageSource = ImageDecoder.createSource(contentResolver, uri)
+                        decoded = ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
+                            val sourceWidth = info.size.width
+                            val sourceHeight = info.size.height
+                            if (sourceWidth <= 0 || sourceHeight <= 0) {
+                                throw IOException("Format gambar tidak dikenali atau foto tidak dapat dibaca.")
+                            }
+                            val largest = max(sourceWidth, sourceHeight)
+                            if (largest > requestedWidth) {
+                                val ratio = requestedWidth.toFloat() / largest.toFloat()
+                                decoder.setTargetSize(
+                                    max(1, (sourceWidth * ratio).roundToInt()),
+                                    max(1, (sourceHeight * ratio).roundToInt())
+                                )
+                            }
+                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                            decoder.isMutableRequired = true
+                        }
+                    } else {
+                        // Older Android versions use BitmapFactory for formats they support.
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        val boundsStream = contentResolver.openInputStream(uri)
+                            ?: throw IOException("Tidak bisa membuka foto dari galeri.")
+                        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                            throw IOException("Format gambar ini tidak didukung Android versi lama.")
+                        }
+                        var sample = 1
+                        while (bounds.outWidth / (sample * 2) >= requestedWidth * 2 &&
+                            bounds.outHeight / (sample * 2) >= 320) sample *= 2
+                        val options = BitmapFactory.Options().apply {
+                            inSampleSize = sample
+                            inPreferredConfig = Bitmap.Config.ARGB_8888
+                        }
+                        decoded = contentResolver.openInputStream(uri)?.use {
+                            BitmapFactory.decodeStream(it, null, options)
+                        } ?: throw IOException("Gagal membuka gambar.")
                     }
-
-                    var sample = 1
-                    while (bounds.outWidth / (sample * 2) >= requestedWidth * 2 &&
-                        bounds.outHeight / (sample * 2) >= 320) sample *= 2
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = sample
-                        inPreferredConfig = Bitmap.Config.ARGB_8888
-                    }
-                    decoded = contentResolver.openInputStream(uri)?.use {
-                        BitmapFactory.decodeStream(it, null, options)
-                    } ?: throw IOException("Gagal membuka gambar.")
 
                     val original = decoded!!
                     val scale = minOf(1f, requestedWidth.toFloat() / original.width.toFloat())
@@ -306,6 +359,38 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        if (showIntro) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(listOf(Color(0xFF07101F), Color(0xFF102744), Color(0xFF050914)))
+                ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.padding(28.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(142.dp),
+                        shape = RoundedCornerShape(38.dp),
+                        color = Color(0xFF10243B),
+                        border = BorderStroke(1.5.dp, Cyan),
+                        shadowElevation = 22.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_photolite_171),
+                                contentDescription = "Logo PicLite 171",
+                                modifier = Modifier.size(112.dp)
+                            )
+                        }
+                    }
+                    Text("PicLite 171", fontSize = 34.sp, color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Cyan, strokeWidth = 2.dp)
+                }
+            }
+        } else {
         Surface(modifier = Modifier.fillMaxSize(), color = Navy) {
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
@@ -314,12 +399,12 @@ class MainActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(id = R.drawable.ic_photolite_171),
-                        contentDescription = "Logo PhotoLite 171",
+                        contentDescription = "Logo PicLite 171",
                         modifier = Modifier.size(56.dp)
                     )
                     Column {
-                        Text("PhotoLite 171", fontSize = 23.sp, color = Color.White)
-                        Text("Kompres ukuran foto", color = Muted, fontSize = 13.sp)
+                        Text("PicLite 171", fontSize = 23.sp, color = Color.White)
+                        Text("Kompres foto dengan mudah", color = Muted, fontSize = 13.sp)
                     }
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
@@ -341,29 +426,29 @@ class MainActivity : ComponentActivity() {
                                 color = Muted, fontSize = 13.sp
                             )
                         } else {
-                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih JPG, PNG, WebP, atau format yang didukung Android", color = Muted, fontSize = 13.sp)
+                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih gambar: JPG, PNG, WebP, GIF, dan format gambar lain yang didukung Android", color = Muted, fontSize = 13.sp)
                         }
                         Button(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) {
                             Icon(Icons.Default.Image, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Pilih dari galeri")
+                            Text("Pilih foto")
                         }
                     }
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("2. ATUR HASIL", color = Cyan, fontSize = 12.sp)
+                        Text("2. KOMPRESI", color = Cyan, fontSize = 13.sp)
                         Text("Format hasil: JPG", fontSize = 15.sp)
-                        Text("Target ukuran: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
+                        Text("Batas ukuran: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
                         Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..5120f, enabled = !busy)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
                             Text("5 MB", color = Muted, fontSize = 11.sp)
                         }
-                        Text("Kompres foto ke ukuran maksimum yang kamu tentukan. Hasil disimpan sebagai JPG.", color = Muted, fontSize = 12.sp)
+                        
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            else Text("Proses gambar")
+                            else Text("Kompres foto")
                         }
                     }
                 }
@@ -406,8 +491,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Text(status, color = Muted, fontSize = 13.sp)
-                Text("Pemrosesan gambar dilakukan di perangkat • PhotoLite 171", color = Muted, fontSize = 11.sp)
+                Text("Foto diproses di perangkat • PicLite 171", color = Muted, fontSize = 11.sp)
             }
+        }
         }
     }
 
