@@ -79,8 +79,8 @@ class MainActivity : ComponentActivity() {
         var sourceMime by remember { mutableStateOf<String?>(null) }
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
-        var minTargetKb by remember { mutableFloatStateOf(3500f) }
-        var maxTargetKb by remember { mutableFloatStateOf(4000f) }
+        var minTargetKb by remember { mutableFloatStateOf(200f) }
+        var maxTargetKb by remember { mutableFloatStateOf(500f) }
         var output by remember { mutableStateOf<ByteArray?>(null) }
         var savedUri by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
@@ -462,7 +462,7 @@ class MainActivity : ComponentActivity() {
                         Slider(
                             value = minTargetKb,
                             onValueChange = { value -> minTargetKb = minOf(value, maxTargetKb) },
-                            valueRange = 50f..5120f,
+                            valueRange = 50f..10240f,
                             enabled = !busy
                         )
                         Text("Maksimum: " + maxTargetKb.roundToInt() + " KB", fontSize = 16.sp)
@@ -472,7 +472,7 @@ class MainActivity : ComponentActivity() {
                             valueRange = 50f..5120f,
                             enabled = !busy
                         )
-                        Text("Kualitas dan resolusi dipertahankan sebisa mungkin. Dimensi baru dikecilkan jika ukuran maksimum belum tercapai.", color = Muted, fontSize = 12.sp)
+                        Text("Rentang bebas 50 KB–10 MB. Pilih minimum dan maksimum sesuai kebutuhan; aplikasi menjaga kualitas sebisa mungkin.", color = Muted, fontSize = 12.sp)
                         
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
