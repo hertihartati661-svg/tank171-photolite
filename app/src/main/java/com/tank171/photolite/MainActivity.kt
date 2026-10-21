@@ -79,7 +79,8 @@ class MainActivity : ComponentActivity() {
         var sourceMime by remember { mutableStateOf<String?>(null) }
         var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
         var previewDimensions by remember { mutableStateOf<String?>(null) }
-        var targetKb by remember { mutableFloatStateOf(471f) }
+        var minTargetKb by remember { mutableFloatStateOf(3500f) }
+        var maxTargetKb by remember { mutableFloatStateOf(4000f) }
         var output by remember { mutableStateOf<ByteArray?>(null) }
         var savedUri by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
@@ -147,8 +148,8 @@ class MainActivity : ComponentActivity() {
         fun processPhoto() {
             val uri = source ?: return
             // Snapshot Compose state on the UI thread before starting background work.
-            val targetBytes = targetKb.roundToInt().toLong() * 1024L
-            val initialQuality = 85
+            val minTargetBytes = minTargetKb.roundToInt().toLong() * 1024L
+            val maxTargetBytes = maxTargetKb.roundToInt().toLong() * 1024L
             val requestedWidth = 4096
             busy = true
             output = null
@@ -208,57 +209,73 @@ class MainActivity : ComponentActivity() {
                     current = if (outWidth != original.width || outHeight != original.height)
                         Bitmap.createScaledBitmap(original, outWidth, outHeight, true) else original
 
+                    // Search quality at full resolution first. Resize only if the maximum cannot be met.
                     var best: ByteArray? = null
                     var bestWidth = current!!.width
                     var bestHeight = current!!.height
-                    var q = initialQuality
-                    var attempt = 0
-                    while (attempt < 40) {
-                        attempt++
-                        val bitmap = current!!
-                        val stream = ByteArrayOutputStream()
-                        val success = bitmap.compress(Bitmap.CompressFormat.JPEG, q, stream)
-                        if (!success) throw IOException("Gagal mengompres foto.")
-                        val candidate = stream.toByteArray()
-
-                        // The target KB is a maximum size; JPEG quality is adjusted internally.
-                        if (candidate.size.toLong() <= targetBytes) {
-                            best = candidate
-                            bestWidth = bitmap.width
-                            bestHeight = bitmap.height
-                            break
+                    var bestScore = Long.MAX_VALUE
+                    var working = current!!
+                    var resizeAttempts = 0
+                    while (resizeAttempts < 12) {
+                        var lowQuality = 45
+                        var highQuality = 100
+                        var qualityAttempts = 0
+                        while (lowQuality <= highQuality && qualityAttempts < 8) {
+                            qualityAttempts++
+                            val q = (lowQuality + highQuality) / 2
+                            val stream = ByteArrayOutputStream()
+                            if (!working.compress(Bitmap.CompressFormat.JPEG, q, stream)) {
+                                throw IOException("Gagal mengompres foto.")
+                            }
+                            val candidate = stream.toByteArray()
+                            val size = candidate.size.toLong()
+                            val score = when {
+                                size in minTargetBytes..maxTargetBytes -> 0L
+                                size < minTargetBytes -> minTargetBytes - size
+                                else -> size - maxTargetBytes
+                            }
+                            if (score < bestScore) {
+                                best = candidate
+                                bestWidth = working.width
+                                bestHeight = working.height
+                                bestScore = score
+                            }
+                            if (size > maxTargetBytes) {
+                                highQuality = q - 1
+                            } else {
+                                lowQuality = q + 1
+                            }
+                            if (size in minTargetBytes..maxTargetBytes) {
+                                // Keep searching for the highest quality that remains in range.
+                                highQuality = 100
+                                lowQuality = q + 1
+                            }
                         }
-
-                        if (best == null || candidate.size < best!!.size) {
-                            best = candidate
-                            bestWidth = bitmap.width
-                            bestHeight = bitmap.height
-                        }
-
-                        if (q > 30) {
-                            q = max(30, q - 10)
-                            continue
-                        }
-
-                        if (bitmap.width <= 320 || bitmap.height <= 320) break
-                        val factor = if (candidate.size.toLong() > targetBytes * 2L) 0.72f else 0.86f
-                        val scaled = Bitmap.createScaledBitmap(
-                            bitmap,
-                            max(1, (bitmap.width * factor).roundToInt()),
-                            max(1, (bitmap.height * factor).roundToInt()),
+                        if (best != null && best!!.size.toLong() in minTargetBytes..maxTargetBytes) break
+                        val bestNow = best
+                        // A result below minimum is preferable to damaging/enlarging it just to inflate bytes.
+                        if (bestNow != null && bestNow.size.toLong() < minTargetBytes) break
+                        if (working.width <= 480 || working.height <= 480) break
+                        val factor = if (bestNow != null && bestNow.size.toLong() > maxTargetBytes * 2L) 0.90f else 0.96f
+                        val resized = Bitmap.createScaledBitmap(
+                            working,
+                            max(1, (working.width * factor).roundToInt()),
+                            max(1, (working.height * factor).roundToInt()),
                             true
                         )
-                        if (bitmap !== decoded && !bitmap.isRecycled) bitmap.recycle()
-                        current = scaled
-                        best = null
-                        q = initialQuality
+                        if (working !== decoded && !working.isRecycled) working.recycle()
+                        working = resized
+                        resizeAttempts++
                     }
-
+                    if (current !== decoded && current !== working && !current!!.isRecycled) current!!.recycle()
+                    current = working
                     val result = best ?: throw IOException("Tidak berhasil menghasilkan gambar.")
                     val dimensions = bestWidth.toString() + " × " + bestHeight + " px"
-                    val message = if (result.size.toLong() <= targetBytes)
-                        "Selesai: ukuran di bawah batas target." else
-                        "Selesai, tetapi batas target belum tercapai pada kualitas/resolusi minimum."
+                    val message = when {
+                        result.size.toLong() in minTargetBytes..maxTargetBytes -> "Selesai: ukuran masuk rentang yang dipilih."
+                        result.size.toLong() < minTargetBytes -> "Hasil lebih kecil dari minimum. Aplikasi tidak memperbesar foto hanya untuk mengejar ukuran minimum."
+                        else -> "Rentang belum tercapai: batas maksimum terlalu kecil untuk kualitas dan resolusi yang tersisa."
+                    }
                     runOnUiThread {
                         output = result
                         savedUri = null
@@ -439,14 +456,23 @@ class MainActivity : ComponentActivity() {
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("2. KOMPRESI", color = Cyan, fontSize = 13.sp)
+                        Text("2. RENTANG UKURAN HASIL", color = Cyan, fontSize = 13.sp)
                         Text("Format hasil: JPG", fontSize = 15.sp)
-                        Text("Target maksimum: " + targetKb.roundToInt() + " KB", fontSize = 17.sp)
-                        Slider(value = targetKb, onValueChange = { targetKb = it }, valueRange = 50f..5120f, enabled = !busy)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("50 KB", color = Muted, fontSize = 11.sp)
-                            Text("5 MB", color = Muted, fontSize = 11.sp)
-                        }
+                        Text("Minimum: " + minTargetKb.roundToInt() + " KB", fontSize = 16.sp)
+                        Slider(
+                            value = minTargetKb,
+                            onValueChange = { value -> minTargetKb = minOf(value, maxTargetKb) },
+                            valueRange = 50f..5120f,
+                            enabled = !busy
+                        )
+                        Text("Maksimum: " + maxTargetKb.roundToInt() + " KB", fontSize = 16.sp)
+                        Slider(
+                            value = maxTargetKb,
+                            onValueChange = { value -> maxTargetKb = maxOf(value, minTargetKb) },
+                            valueRange = 50f..5120f,
+                            enabled = !busy
+                        )
+                        Text("Kualitas dan resolusi dipertahankan sebisa mungkin. Dimensi baru dikecilkan jika ukuran maksimum belum tercapai.", color = Muted, fontSize = 12.sp)
                         
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
