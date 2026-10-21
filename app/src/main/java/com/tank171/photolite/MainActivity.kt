@@ -344,7 +344,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Text("PicLite 171", fontSize = 34.sp, color = Color.White)
-                    Text("KOMPRES FOTO • HASIL LEBIH RINGAN", fontSize = 11.sp, color = Cyan, letterSpacing = 1.3.sp)
+                    Text("Kompres Foto", fontSize = 13.sp, color = Cyan, letterSpacing = 1.0.sp)
                     Spacer(Modifier.height(14.dp))
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Cyan, strokeWidth = 2.dp)
                     Text("Siap dalam sekejap", color = Muted, fontSize = 12.sp)
@@ -359,7 +359,7 @@ class MainActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(id = R.drawable.ic_photolite_171),
-                        contentDescription = "Logo PhotoLite 171",
+                        contentDescription = "Logo PicLite 171",
                         modifier = Modifier.size(56.dp)
                     )
                     Column {
@@ -405,7 +405,7 @@ class MainActivity : ComponentActivity() {
                             Text("50 KB", color = Muted, fontSize = 11.sp)
                             Text("5 MB", color = Muted, fontSize = 11.sp)
                         }
-                        Text("Hasil dikompres dan disimpan sebagai JPG.", color = Muted, fontSize = 12.sp)
+                        
                         Button(onClick = { processPhoto() }, enabled = source != null && !busy, modifier = Modifier.fillMaxWidth()) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             else Text("Kompres foto")
