@@ -387,9 +387,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Text("PicLite 171", fontSize = 34.sp, color = Color.White)
-                    Spacer(Modifier.height(14.dp))
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Cyan, strokeWidth = 2.dp)
-                    Text("Siap dalam sekejap", color = Muted, fontSize = 12.sp)
                 }
             }
         } else {
@@ -428,7 +426,7 @@ class MainActivity : ComponentActivity() {
                                 color = Muted, fontSize = 13.sp
                             )
                         } else {
-                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih gambar dengan format yang didukung Android", color = Muted, fontSize = 13.sp)
+                            Text(sourceSize?.let { "Ukuran asli: " + formatBytes(it) } ?: "Pilih gambar: JPG, PNG, WebP, GIF, dan format gambar lain yang didukung Android", color = Muted, fontSize = 13.sp)
                         }
                         Button(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) {
                             Icon(Icons.Default.Image, contentDescription = null)
